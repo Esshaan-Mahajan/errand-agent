@@ -27,7 +27,8 @@ CORE_KEYS = {"preferred_area", "earliest_time", "latest_time", "default_budget"}
 
 _WORD = re.compile(r"[a-z0-9]+")
 _STOP = {"the", "a", "an", "my", "for", "to", "of", "in", "at", "on", "and", "or", "is", "it", "i", "me", "this",
-         "that", "with", "please", "find", "book", "get", "need", "want", "last", "time", "same", "as", "but", "not"}
+         "that", "with", "please", "find", "book", "get", "need", "want", "last", "time", "same", "as", "but", "not",
+         "week", "today", "tomorrow", "under", "over", "about", "from", "morning", "mornings"}
 
 
 @dataclass
@@ -52,7 +53,8 @@ class Selection:
 
 
 def tokens_of(text: str) -> set[str]:
-    return {w for w in _WORD.findall(text.lower()) if w not in _STOP}
+    # Bare numbers say nothing about relevance: "1,500" must not match misc_fact_1.
+    return {w for w in _WORD.findall(text.lower()) if w not in _STOP and not w.isdigit()}
 
 
 class MemoryStore:

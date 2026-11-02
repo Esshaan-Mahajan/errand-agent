@@ -106,7 +106,7 @@ class ContextBuilder:
             spent += cost
 
         history_budget = int(budget * self.limits.history_token_share)
-        rows = self.db.all("SELECT id, role, text FROM messages WHERE user_id=? AND id<? ORDER BY id DESC",
+        rows = self.db.all("SELECT id, role, text FROM messages WHERE user_id=? AND id<? AND private=0 ORDER BY id DESC",
                            (user_id, current_message_id))
         kept, used = [], 0
         cut = len(rows)
@@ -126,7 +126,7 @@ class ContextBuilder:
         for row in rows[cut:]:
             if len(excerpts) >= 3:
                 break
-            if row["role"] == "user" and query and len(query & tokens_of(row["text"])) >= 2:
+            if row["role"] == "user" and query & tokens_of(row["text"]):
                 excerpts.append(row)
 
         sections = [SYSTEM_RULES, f"<today>{self.clock.now().strftime('%A %Y-%m-%d %H:%M')}</today>"]

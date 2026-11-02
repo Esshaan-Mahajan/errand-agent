@@ -74,6 +74,7 @@ def test_claim_guard_keeps_honest_negative_statements(tmp_path, honest):
     "Your booking is confirmed.",
     "I've cancelled it for you.",
     "Nothing to worry about. Your visit has been rescheduled to Friday.",
+    "No worries, your plumber has been booked.",
 ])
 def test_claim_guard_still_blocks_false_claims(tmp_path, claim):
     agent, _ = make_agent(tmp_path)
@@ -109,11 +110,11 @@ def test_inspection_reply_stays_private_after_the_fact_is_confirmed(tmp_path):
 # such as misc_fact_1 and sent irrelevant facts to the model.
 
 def test_numbers_do_not_make_a_memory_relevant(tmp_path):
-    assert tokens_of("under 1,500 on the 12th") == {"12th"} or "1" not in tokens_of("under 1,500")
+    assert not {"1", "500"} & tokens_of("under 1,500")
     db = Database(tmp_path / "a.db", AGENT_SCHEMA)
     store = MemoryStore(db, FakeClock())
     store.add(USER, "misc_fact_1", "unrelated-value-1", EXPLICIT, "misc", source="seed")
     store.add(USER, "preferred_area", "indiranagar", EXPLICIT, "general", source="seed")
     chosen = store.select_for_context(USER, tokens_of("Find a plumber this week, under 1,500"), "plumber")
     assert [m.key for m, _ in chosen.included] == ["preferred_area"]
-    assert any(True for _ in chosen.excluded["irrelevant"])
+    assert len(chosen.excluded["irrelevant"]) == 1

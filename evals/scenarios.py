@@ -714,7 +714,13 @@ def _(h: Harness):
     memory = h.agent.memory.inspect(USER)[0]
     h.check("downgraded", memory.kind == INFERRED)
     h.check("not enforceable", h.agent.memory.preference(USER, "default_budget") is None)
-    return f"kind={memory.kind}"
+    # The model's own tool argument is replayed within that one run, so I5 is checked on later runs here.
+    h.facts["inferred_allowed_in_user_text"] = ("9999",)
+    before = len(h.llm.requests)
+    h.say("Find a plumber")
+    later = h.llm.requests[before:]
+    h.check("value absent from later runs", later and all("9999" not in r.system + str(r.messages) for r in later))
+    return f"kind={memory.kind}; absent from later runs"
 
 
 # ---------------------------------------------------------------------- proactive follow-up

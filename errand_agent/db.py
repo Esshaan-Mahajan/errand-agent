@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS messages (
     role TEXT NOT NULL,
     text TEXT NOT NULL,
     run_id TEXT,
+    private INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, id);

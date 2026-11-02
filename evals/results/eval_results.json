@@ -53,7 +53,7 @@
     "id": "reschedule_with_approval",
     "category": "conversation",
     "expected": "Move proposed with old and new slot, applied after approval and verified",
-    "actual": "booking bk-b3e2c94d now 2026-11-07T10:00; outcome=execution_succeeded",
+    "actual": "booking bk-64da7ff0 now 2026-11-07T10:00; outcome=execution_succeeded",
     "passed": true,
     "notes": "",
     "failed_checks": [],
@@ -154,11 +154,9 @@
     "category": "approval",
     "expected": "A hold quote over budget can't become a proposal",
     "actual": "outcome=completed; pending=None",
-    "passed": false,
-    "notes": "FAILED: user told",
-    "failed_checks": [
-      "user told"
-    ],
+    "passed": true,
+    "notes": "",
+    "failed_checks": [],
     "checks_run": 10
   },
   {
@@ -376,11 +374,9 @@
     "category": "tool_failure",
     "expected": "Search stays down: retries stop and the user gets a clear message",
     "actual": "search calls=3; outcome=completed",
-    "passed": false,
-    "notes": "FAILED: clear message",
-    "failed_checks": [
-      "clear message"
-    ],
+    "passed": true,
+    "notes": "",
+    "failed_checks": [],
     "checks_run": 9
   },
   {
@@ -388,11 +384,9 @@
     "category": "tool_failure",
     "expected": "A hanging tool is cut off by its timeout and the run still ends cleanly",
     "actual": "elapsed=0.20s; outcome=completed",
-    "passed": false,
-    "notes": "FAILED: clear message",
-    "failed_checks": [
-      "clear message"
-    ],
+    "passed": true,
+    "notes": "",
+    "failed_checks": [],
     "checks_run": 9
   },
   {
@@ -490,12 +484,9 @@
     "category": "memory",
     "expected": "An inferred fact is shown to the user, kept from the model, and usable only after confirmation",
     "actual": "inspection shown directly; model requests=4; none contained the value",
-    "passed": false,
-    "notes": "FAILED: model never saw it; I5 no forgotten or unconfirmed fact reached the model",
-    "failed_checks": [
-      "model never saw it",
-      "I5 no forgotten or unconfirmed fact reached the model"
-    ],
+    "passed": true,
+    "notes": "",
+    "failed_checks": [],
     "checks_run": 11
   },
   {
@@ -512,13 +503,11 @@
     "id": "unquoted_memory_write_downgraded",
     "category": "memory",
     "expected": "A memory claim without the user's words is stored as inferred, not explicit",
-    "actual": "kind=inferred",
-    "passed": false,
-    "notes": "Scripted model FAILED: I5 no forgotten or unconfirmed fact reached the model",
-    "failed_checks": [
-      "I5 no forgotten or unconfirmed fact reached the model"
-    ],
-    "checks_run": 9
+    "actual": "kind=inferred; absent from later runs",
+    "passed": true,
+    "notes": "Scripted model",
+    "failed_checks": [],
+    "checks_run": 10
   },
   {
     "id": "proactive_replacement_needs_fresh_approval",
@@ -564,7 +553,7 @@
     "id": "proactive_urgency_channel",
     "category": "proactive",
     "expected": "A slot within 24h goes out on the urgent channel; further out it's normal chat",
-    "actual": "bk-c245b33f -> urgent; bk-1611efa9 -> chat",
+    "actual": "bk-75477294 -> urgent; bk-20769150 -> chat",
     "passed": true,
     "notes": "",
     "failed_checks": [],
@@ -574,7 +563,7 @@
     "id": "proactive_covered_by_other_booking",
     "category": "proactive",
     "expected": "Another booking already covers it: inform only, don't hunt for a replacement",
-    "actual": "decision=another booking bk-bd6d5d52 already covers this service",
+    "actual": "decision=another booking bk-2bf00921 already covers this service",
     "passed": true,
     "notes": "",
     "failed_checks": [],
@@ -584,7 +573,7 @@
     "id": "proactive_does_not_disturb_open_errand",
     "category": "proactive",
     "expected": "An in-progress proposal isn't overwritten by a replacement",
-    "actual": "pending P-5EC0 preserved",
+    "actual": "pending P-8174 preserved",
     "passed": true,
     "notes": "",
     "failed_checks": [],
@@ -614,13 +603,10 @@
     "id": "context_budget_with_seeded_memory_and_history",
     "category": "context",
     "expected": "60+ memories and 300+ messages: every request under budget; only relevant, current facts sent; logged per turn",
-    "actual": "58 memories, 302 messages; peak 4576/6000 tokens over 5 turns; 7 memories sent; excluded {'forgotten': 1, 'superseded': 1, 'inferred_unconfirmed': 3, 'expired': 1, 'irrelevant': 45}",
-    "passed": false,
-    "notes": "FAILED: relevant old turn recalled; irrelevant-marker-1 absent (irrelevant)",
-    "failed_checks": [
-      "relevant old turn recalled",
-      "irrelevant-marker-1 absent (irrelevant)"
-    ],
+    "actual": "58 memories, 302 messages; peak 4594/6000 tokens over 5 turns; 5 memories sent; excluded {'forgotten': 1, 'superseded': 1, 'inferred_unconfirmed': 3, 'expired': 1, 'irrelevant': 47}",
+    "passed": true,
+    "notes": "",
+    "failed_checks": [],
     "checks_run": 24
   },
   {

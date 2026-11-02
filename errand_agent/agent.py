@@ -30,6 +30,8 @@ _CLAIM = re.compile(
     r"|\byour\b.{0,40}\b(booking|appointment|visit)\b.{0,25}\b(is|was)\b.{0,12}\b(confirmed|booked|set|done)\b",
     re.IGNORECASE | re.DOTALL,
 )
+_NEGATED = re.compile(r"\b(not|nothing|never|none|cannot|unable|failed)\b|n't\b", re.IGNORECASE)
+_FILLER_NEGATIONS = re.compile(r"\bno (worries|problem|issues?)\b|\bnot to worry\b|\bnothing to worry\b", re.IGNORECASE)
 _NO_CHANGE = "No booking, cancellation or reschedule was made in this request."
 
 
@@ -107,9 +109,10 @@ class Agent:
     def new_tracer(self, user_id: str, kind: str = "message") -> Tracer:
         return Tracer(self.trace_dir, self.clock, user_id, kind=kind, on_event=self.on_trace_event)
 
-    def add_message(self, user_id: str, role: str, text: str, run_id: str | None) -> int:
-        cursor = self.db.execute("INSERT INTO messages (user_id, role, text, run_id, created_at) VALUES (?,?,?,?,?)",
-                                 (user_id, role, text, run_id, fmt_seconds(self.clock.now())))
+    def add_message(self, user_id: str, role: str, text: str, run_id: str | None, private: bool = False) -> int:
+        """`private` messages are shown to the user but never enter the model's context."""
+        cursor = self.db.execute("INSERT INTO messages (user_id, role, text, run_id, private, created_at) VALUES (?,?,?,?,?,?)",
+                                 (user_id, role, text, run_id, int(private), fmt_seconds(self.clock.now())))
         return cursor.lastrowid
 
     def _lock_for(self, user_id: str) -> threading.Lock:
@@ -194,7 +197,8 @@ class Agent:
         return self._finish(user_id, tracer, "awaiting_approval", render_prompt(proposal, intro), proposal=proposal)
 
     def _finish(self, user_id, tracer, outcome: str, reply: str, proposal: Proposal | None = None) -> AgentReply:
-        message_id = self.add_message(user_id, "assistant", reply, tracer.run_id)
+        # A memory listing can include unconfirmed inferences, which must not reach the model via history.
+        message_id = self.add_message(user_id, "assistant", reply, tracer.run_id, private=outcome == "memory_shown")
         if proposal is not None:
             self.gate.mark_shown(proposal.id, message_id)
         workflow = self.workflows.active(user_id)
@@ -311,7 +315,7 @@ class Agent:
         """The model never gets to report a side effect, however confident it sounds."""
         if not text:
             return f"I wasn't able to produce an answer. {_NO_CHANGE}"
-        if _CLAIM.search(text) and not run.read_bookings:
+        if _claims_success(text) and not run.read_bookings:
             run.tracer.event("guard_blocked", guard="unverified_success_claim", text=text[:300])
             return ("I can't confirm that anything has been booked or changed: nothing has gone through in this "
                     f"request. {_NO_CHANGE} Would you like me to continue?")
@@ -667,6 +671,14 @@ class Agent:
             self.workflows.save(workflow)
         scrub_traces(self.trace_dir, value)
         return changed
+
+
+def _claims_success(text: str) -> bool:
+    """True if any sentence asserts a completed action. "Nothing has been booked" asserts the opposite."""
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+        if _CLAIM.search(sentence) and not _NEGATED.search(_FILLER_NEGATIONS.sub("", sentence)):
+            return True
+    return False
 
 
 def _minutes(value: str) -> int:
