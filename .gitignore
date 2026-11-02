@@ -7,3 +7,4 @@ data/
 !/traces/.gitkeep
 *.db
 *.db-journal
+*.egg-info/
