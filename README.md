@@ -14,7 +14,7 @@ A chat agent that arranges home-service errands: it clarifies missing details, c
 | Three real bugs | [docs/BUGS.md](docs/BUGS.md) | Done |
 | End-to-end trace with timeout-after-success | [raw file](docs/trace_timeout_after_success.jsonl), excerpt in the design note | Done, with the offline stand-in model |
 | Recorded demo, 3 to 5 min | [script](docs/DEMO_SCRIPT.md) | **To do: you record and upload it** |
-| AI assistant transcript | [docs/AI_TRANSCRIPT.md](docs/AI_TRANSCRIPT.md) | Done; personal paths and listings redacted |
+| AI assistant transcript | Exported separately, not in this repo; [summary here](docs/AI_USAGE.md) | **To do: review the export and attach it to your submission** |
 
 ## Verification status
 

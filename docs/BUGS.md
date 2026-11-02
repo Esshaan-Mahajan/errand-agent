@@ -1,6 +1,6 @@
 # Three real bugs hit while building
 
-All three happened in this repo. The git history shows the state before and after each fix, and the [AI transcript](AI_TRANSCRIPT.md) shows them being found. Regression tests are in [`tests/test_regressions.py`](../tests/test_regressions.py).
+All three happened in this repo. The git history shows the state before and after each fix. Regression tests are in [`tests/test_regressions.py`](../tests/test_regressions.py).
 
 ## Bug 1: saying "cancel it" booked the plumber
 
