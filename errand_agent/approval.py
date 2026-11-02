@@ -32,8 +32,18 @@ _APPROVE = {
     "yes", "y", "yep", "yeah", "yes please", "ok", "okay", "ok go ahead", "okay go ahead", "sure", "confirm",
     "confirmed", "i confirm", "yes confirm", "yes i confirm", "go ahead", "yes go ahead", "please go ahead",
     "do it", "yes do it", "please do", "proceed", "please proceed", "yes proceed", "approve", "approved",
-    "i approve", "book it", "yes book it", "please book it", "reschedule it", "yes reschedule it",
-    "move it", "yes move it", "cancel it", "yes cancel it", "please cancel it",
+    "i approve",
+}
+# An action word only counts as consent to that action: "cancel it" must never approve a booking.
+_APPROVE_FOR_ACTION = {
+    "book": {"book it", "yes book it", "please book it"},
+    "cancel": {"cancel it", "yes cancel it", "please cancel it"},
+    "reschedule": {"reschedule it", "yes reschedule it", "move it", "yes move it"},
+}
+_STOP_WORDS_FOR_ACTION = {
+    "book": {"cancel", "cancel it", "cancel that"},
+    "reschedule": {"cancel", "cancel it", "cancel that"},
+    "cancel": set(),
 }
 _REJECT = {
     "no", "n", "nope", "nah", "no thanks", "no thank you", "not now", "dont", "do not", "stop", "never mind",
@@ -41,23 +51,28 @@ _REJECT = {
 }
 
 
-def parse_reply(text: str, proposal_code: str) -> Reply:
+def _normalise(text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s-]", "", text.lower())).strip()
+
+
+def parse_reply(text: str, proposal_code: str, action: str) -> Reply:
     """Strict grammar over the raw message. Anything with extra content is not an approval."""
-    normalised = re.sub(r"[^\w\s-]", "", text.lower()).strip()
-    normalised = re.sub(r"\s+", " ", normalised)
+    normalised = _normalise(text)
     # "confirm P-AB12" names the proposal; naming a different one is not consent to this one.
     match = re.fullmatch(r"(?:yes |i )?(?:confirm|approve) (p-[a-z0-9]{4})", normalised)
     if match:
         return Reply.APPROVE if match.group(1) == proposal_code.lower() else Reply.OTHER
-    if normalised in _APPROVE:
+    if normalised in _APPROVE or normalised in _APPROVE_FOR_ACTION[action]:
         return Reply.APPROVE
-    if normalised in _REJECT:
+    if normalised in _REJECT or normalised in _STOP_WORDS_FOR_ACTION[action]:
         return Reply.REJECT
     return Reply.OTHER
 
 
 def is_bare_affirmative(text: str) -> bool:
-    return parse_reply(text, "p-0000") is Reply.APPROVE
+    """Would this be consent to something, if there were anything to consent to?"""
+    normalised = _normalise(text)
+    return normalised in _APPROVE or any(normalised in words for words in _APPROVE_FOR_ACTION.values())
 
 
 def fingerprint(action: str, user_id: str, details: dict) -> str:

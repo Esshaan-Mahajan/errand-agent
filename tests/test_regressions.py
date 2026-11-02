@@ -118,3 +118,26 @@ def test_numbers_do_not_make_a_memory_relevant(tmp_path):
     chosen = store.select_for_context(USER, tokens_of("Find a plumber this week, under 1,500"), "plumber")
     assert [m.key for m, _ in chosen.included] == ["preferred_area"]
     assert len(chosen.excluded["irrelevant"]) == 1
+
+
+# Bug 5: approval phrases ignored the proposal's action, so "cancel it" (meaning stop) on a booking
+# prompt counted as consent and booked the plumber.
+
+def test_cancel_it_on_a_booking_prompt_does_not_book(tmp_path):
+    agent, _ = make_agent(tmp_path, world_config=WorldConfig(book_script=["success"]))
+    prompt = agent.handle_message(USER, "Find a plumber in Indiranagar this week, mornings only, under 1,500.")
+    assert prompt.outcome == "awaiting_approval"
+    reply = agent.handle_message(USER, "cancel it")
+    assert reply.outcome == "rejected"
+    assert agent.world.bookings(USER) == []
+    assert agent.world.call_count("book") == 0
+
+
+def test_forgotten_preference_is_not_inferred_back(tmp_path):
+    agent, _ = make_agent(tmp_path)
+    agent.world.seed_booking(USER, "plumber", "whitefield", "2026-11-03T10:00")
+    agent.world.seed_booking(USER, "cleaner", "whitefield", "2026-11-04T10:00")
+    memory = agent.memory.add(USER, "preferred_area", "whitefield", EXPLICIT, source="seed")
+    agent.memory.forget(memory)
+    agent._infer_from_history(USER, agent.new_tracer(USER))
+    assert agent.memory.inspect(USER) == []

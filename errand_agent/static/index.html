@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Errand Agent</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --ink: #1f2328; --muted: #646b73; --line: #dedbd2;
+    --accent: #b34d12; --accent-ink: #ffffff; --user: #1f3a5f; --user-ink: #ffffff; --agent: #f1efe9;
+    --ok: #1c6b3c; --warn: #a15c00; --bad: #b3261e; --info: #1f5fa8; --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171a; --panel: #1d2024; --ink: #e6e4df; --muted: #9aa0a7; --line: #33373d;
+      --accent: #e0793a; --accent-ink: #1a1208; --user: #2c4f7c; --user-ink: #f2f5f9; --agent: #272a2f;
+      --ok: #5fc78a; --warn: #e2a64b; --bad: #f08a82; --info: #79b0ee;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  h1 { font-size: 15px; margin: 0; }
+  #model { color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  label { font-size: 12px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+  select, button { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(320px, 1fr) minmax(320px, 1.15fr); }
+  section { min-height: 0; display: flex; flex-direction: column; }
+  #chat-col { border-right: 1px solid var(--line); }
+  .col-title { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 8px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+  #chat { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 92%; padding: 8px 11px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg.user { background: var(--user); color: var(--user-ink); align-self: flex-end; }
+  .msg.agent { background: var(--agent); align-self: flex-start; }
+  .tag { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .empty { color: var(--muted); margin: auto; text-align: center; max-width: 34ch; }
+  form { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel); }
+  textarea { flex: 1; resize: none; height: 40px; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  #send { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; padding: 0 16px; }
+  #send:disabled { opacity: .6; cursor: progress; }
+  #trace { flex: 1; overflow-y: auto; font: 12px/1.45 var(--mono); padding: 8px 0; }
+  .ev { padding: 3px 16px; border-left: 3px solid transparent; overflow-wrap: anywhere; }
+  .ev .t { font-weight: 600; }
+  .ev .d { color: var(--muted); }
+  .ev.state { border-left-color: var(--info); } .ev.state .t { color: var(--info); }
+  .ev.model { border-left-color: var(--line); }
+  .ev.tool { border-left-color: var(--line); }
+  .ev.bad .t { color: var(--bad); } .ev.bad { border-left-color: var(--bad); }
+  .ev.warn .t { color: var(--warn); } .ev.warn { border-left-color: var(--warn); }
+  .ev.good .t { color: var(--ok); } .ev.good { border-left-color: var(--ok); }
+  .ev.run { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 7px; }
+  #world { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 16px; max-height: 26%; overflow-y: auto; font-size: 12px; }
+  #world h2 { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 6px 0 3px; font-weight: 600; }
+  #world div.row { font-family: var(--mono); overflow-wrap: anywhere; }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 1.2fr 1fr; }
+    #chat-col { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Errand Agent</h1>
+  <span id="model"></span>
+  <span class="spacer"></span>
+  <label>Scenario <select id="scenario"></select></label>
+  <button id="provider-cancel" type="button" title="Simulate the provider cancelling your latest booking">Provider cancels</button>
+  <button id="restart" type="button" title="Drop all in-memory state and reopen from disk">Restart process</button>
+</header>
+<main>
+  <section id="chat-col">
+    <div class="col-title"><span>Chat</span></div>
+    <div id="chat" aria-live="polite"></div>
+    <form id="form">
+      <textarea id="input" placeholder="Find a plumber for my kitchen tap this week, mornings only, under 1,500." aria-label="Message"></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+  </section>
+  <section>
+    <div class="col-title"><span>Live trace</span><span id="count"></span></div>
+    <div id="trace"></div>
+    <div id="world"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const short = (v, n = 150) => { const s = typeof v === "string" ? v : JSON.stringify(v); return s && s.length > n ? s.slice(0, n) + "…" : s; };
+
+function describe(e) {
+  switch (e.type) {
+    case "run_start": return ["run", "run_start", `${e.run_id} (${e.kind})`];
+    case "user_message": return ["", "user_message", short(e.text, 110)];
+    case "reply_classified": return [e.verdict === "approve" ? "good" : "", "reply_classified", `${e.verdict}: decided by code, not the model`];
+    case "state_transition": return ["state", "state", `${e.from_state} → ${e.to_state}: ${e.reason}`];
+    case "workflow_created": return ["state", "workflow", `${e.workflow_id} (${e.kind || "?"})`];
+    case "request_updated": return ["", "request_updated", short(e.changed)];
+    case "context_sent": return ["model", "context_sent", `turn ${e.turn}: ${e.estimated_tokens}/${e.budget} tokens, ${(e.memories_included||[]).length} memories sent, history ${(e.history_message_ids||[]).length} msgs`];
+    case "model_call": {
+      const tools = (e.response||[]).filter(b => b.type === "tool_use").map(b => b.name).join(", ");
+      const cost = e.estimated_cost_usd == null ? "cost n/a" : "$" + e.estimated_cost_usd;
+      return ["model", "model_call", `${e.model}: ${e.latency_ms}ms, ${e.input_tokens}+${e.output_tokens} tokens, ${cost}${tools ? " → " + tools : ""}`];
+    }
+    case "tool_call": return [e.ok ? "tool" : "warn", `tool ${e.tool}`, `${short(e.args, 90)} → ${e.ok ? short(e.result, 120) : "ERROR " + e.error + ": " + (e.detail||"")} (${e.latency_ms}ms)`];
+    case "guard_blocked": return ["bad", "GUARD BLOCKED", `${e.guard}${e.tool ? " (" + e.tool + ")" : ""}`];
+    case "untrusted_content_flagged": return ["warn", "untrusted content", `${e.provider_id}: prompt-injection text treated as data`];
+    case "proposal_created": return ["state", "proposal", `${e.code} ${e.action}: ${short({provider:e.details.provider_id, slot:e.details.slot, price:e.details.price})}`];
+    case "approval_recorded": return ["good", "approval_recorded", `user message #${e.user_message_id}, key ${e.idempotency_key}`];
+    case "approval_invalidated": return ["warn", "approval_invalidated", e.reason];
+    case "side_effect_verified": return ["good", "VERIFIED", `${e.action} ${e.booking_id} confirmed by source of truth`];
+    case "recovery_started": return ["warn", "recovery", `resuming ${e.action} ${e.idempotency_key}`];
+    case "verification_unavailable": return ["warn", "verification_unavailable", "status can't be reached"];
+    case "provider_cancellation_detected": return ["warn", "cancellation detected", `${e.booking_id} (${e.provider}) by ${e.detected_by}`];
+    case "followup_decision": return ["state", "followup_decision", `notify=${e.notify}, channel=${e.channel}, replace=${e.seek_replacement}: ${e.reason}`];
+    case "limit_reached": return ["bad", "limit_reached", e.code];
+    case "simulator": return ["warn", "simulator", e.note];
+    case "run_end": return ["", "run_end", `${e.outcome}; ${e.model_calls} model, ${e.tool_calls} tool calls`];
+    default: { const {type, seq, run_id, ts, ...rest} = e; return ["", type, short(rest, 120)]; }
+  }
+}
+
+let lastChat = -1, lastEvents = -1;
+function render(s) {
+  $("model").textContent = "Model: " + s.model;
+  const sel = $("scenario");
+  if (sel.options.length !== s.scenarios.length) sel.innerHTML = s.scenarios.map(n => `<option>${esc(n)}</option>`).join("");
+  if (document.activeElement !== sel) sel.value = s.scenario;
+
+  if (s.chat.length !== lastChat) {
+    lastChat = s.chat.length;
+    const chat = $("chat");
+    chat.innerHTML = s.chat.length ? s.chat.map(m => `<div class="msg ${m.role}">${esc(m.text)}${m.tag ? `<span class="tag">${esc(m.tag)}</span>` : ""}</div>`).join("")
+      : `<div class="empty">Ask for an errand, for example: find a plumber for my kitchen tap this week, mornings only, under 1,500.</div>`;
+    chat.scrollTop = chat.scrollHeight;
+  }
+  if (s.events.length !== lastEvents) {
+    lastEvents = s.events.length;
+    $("count").textContent = s.events.length + " events";
+    const trace = $("trace");
+    const stick = trace.scrollHeight - trace.scrollTop - trace.clientHeight < 60;
+    trace.innerHTML = s.events.map(e => { const [cls, t, d] = describe(e); return `<div class="ev ${cls}"><span class="t">${esc(t)}</span> <span class="d">${esc(d)}</span></div>`; }).join("");
+    if (stick) trace.scrollTop = trace.scrollHeight;
+  }
+  $("world").innerHTML = `<h2>Bookings (mock world)</h2>` + (s.bookings.length ? s.bookings.map(b => `<div class="row">${esc(b.id)} ${esc(b.service)} ${esc(b.provider_name)} ${esc(b.slot)} ${esc(b.price)} <b>${esc(b.status)}</b></div>`).join("") : `<div class="row">none</div>`)
+    + `<h2>Memory</h2>` + (s.memories.length ? s.memories.map(m => `<div class="row">${esc(m.key)} = ${esc(m.value)} (${esc(m.kind)})</div>`).join("") : `<div class="row">none</div>`);
+}
+
+async function refresh() {
+  try { render(await (await fetch("/api/state")).json()); } catch (e) { /* the server may be restarting */ }
+}
+async function post(path, body) {
+  const res = await fetch(path, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body || {})});
+  return res.json();
+}
+$("form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const text = $("input").value.trim();
+  if (!text) return;
+  $("input").value = "";
+  $("send").disabled = true;
+  const pending = post("/api/send", {text});
+  refresh();
+  await pending;
+  $("send").disabled = false;
+  $("input").focus();
+  refresh();
+});
+$("input").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("form").requestSubmit(); }
+});
+$("scenario").addEventListener("change", async (ev) => { await post("/api/reset", {scenario: ev.target.value}); lastChat = lastEvents = -1; refresh(); });
+$("restart").addEventListener("click", async () => { await post("/api/restart"); refresh(); });
+$("provider-cancel").addEventListener("click", async () => {
+  const result = await post("/api/provider-cancel");
+  if (result.error) alert(result.error);
+  refresh();
+});
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>

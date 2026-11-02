@@ -145,7 +145,7 @@ class Agent:
 
         pending = self.gate.pending(user_id)
         if pending is not None:
-            verdict = parse_reply(text, pending.code)
+            verdict = parse_reply(text, pending.code, pending.action)
             tracer.event("reply_classified", verdict=verdict.value, proposal_id=pending.id)
             if verdict is Reply.APPROVE:
                 return self._on_approve(user_id, pending, message_id, tracer, prefix)
@@ -157,7 +157,16 @@ class Agent:
                 return handled
         return self._run_model(user_id, text, message_id, tracer, prefix)
 
+    def _latest_assistant_message(self, user_id):
+        return self.db.one("SELECT id, text FROM messages WHERE user_id=? AND role='assistant' ORDER BY id DESC LIMIT 1",
+                           (user_id,))
+
     def _on_approve(self, user_id, pending: Proposal, message_id, tracer, prefix) -> AgentReply:
+        # A yes answers the last thing said. If that wasn't the prompt, show the prompt again.
+        latest = self._latest_assistant_message(user_id)
+        if latest is None or latest["id"] != pending.shown_msg_id:
+            tracer.event("guard_blocked", guard="approval_prompt_not_latest", proposal_id=pending.id)
+            return self._show_proposal(user_id, tracer, pending, intro=prefix.strip() or None)
         approval = self.gate.approve(pending, message_id, tracer)
         if approval is None:
             return self._finish(user_id, tracer, "awaiting_approval", prefix + render_prompt(pending),
@@ -177,7 +186,8 @@ class Agent:
     def _repeat_confirmation(self, user_id, tracer, prefix) -> AgentReply | None:
         """A "yes" with nothing pending must never turn into a second side effect."""
         record = self.executor.latest_for_user(user_id)
-        if record is None:
+        latest = self._latest_assistant_message(user_id)
+        if record is None or latest is None or self.executor.replay_message(record) not in latest["text"]:
             return None
         tracer.event("repeat_confirmation", idempotency_key=record["idempotency_key"], status=record["status"])
         if record["status"] == SUCCEEDED:
@@ -191,7 +201,24 @@ class Agent:
     def _report_execution(self, user_id, tracer, outcome: ExecOutcome, prefix: str) -> AgentReply:
         if outcome.proposal:
             return self._show_proposal(user_id, tracer, outcome.proposal, intro=prefix + outcome.message)
+        if outcome.status == SUCCEEDED:
+            self._infer_from_history(user_id, tracer)
         return self._finish(user_id, tracer, f"execution_{outcome.status}", prefix + outcome.message)
+
+    def _infer_from_history(self, user_id, tracer) -> None:
+        """Repeated behaviour suggests a preference. It stays inferred until the user confirms it,
+        and a fact the user asked to forget is never inferred back."""
+        if any(m.key == "preferred_area" for m in self.memory.all_rows(user_id)):
+            return
+        result = self.tools.read("list_bookings", {"user_id": user_id}, RunBudget(self.limits, self.clock), tracer)
+        if not result.ok:
+            return
+        areas = [b["area"] for b in result.data["bookings"] if b["status"] in ("confirmed", "completed")]
+        for area in set(areas):
+            if areas.count(area) >= 2:
+                self.memory.add(user_id, "preferred_area", area, INFERRED, source="booking-history")
+                tracer.event("memory_written", key="preferred_area", kind=INFERRED, source="booking-history")
+                return
 
     def _show_proposal(self, user_id, tracer, proposal: Proposal, intro: str | None = None) -> AgentReply:
         return self._finish(user_id, tracer, "awaiting_approval", render_prompt(proposal, intro), proposal=proposal)
@@ -342,6 +369,8 @@ class Agent:
 
     def _workflow(self, run: _Run, kind: str | None = None, new: bool = False) -> st.Workflow:
         workflow = self.workflows.active(run.user_id)
+        if workflow is not None and workflow.state in st.IN_EXECUTION:
+            workflow = None
         if workflow is not None and new:
             self.gate.invalidate_pending(run.user_id, "new errand started", run.tracer)
             if workflow.state in (st.INTAKE, st.COMPARING, st.AWAITING_APPROVAL):
@@ -479,9 +508,15 @@ class Agent:
         return _Tool(result.data)
 
     def _tool_get_booking_status(self, args, run: _Run) -> _Tool:
-        result = self.tools.read("get_booking_status", {"hold_id": args.get("hold_id"),
-                                                        "idempotency_key": args.get("idempotency_key")},
-                                 run.budget, run.tracer)
+        key, hold_id = args.get("idempotency_key"), args.get("hold_id")
+        workflow = self.workflows.active(run.user_id)
+        owned = (key and self.db.one("SELECT 1 FROM executions WHERE idempotency_key=? AND user_id=?", (key, run.user_id))) \
+            or (hold_id and ((workflow and hold_id in workflow.holds)
+                             or self.db.one("SELECT 1 FROM executions WHERE hold_id=? AND user_id=?", (hold_id, run.user_id))))
+        if not owned:
+            run.tracer.event("guard_blocked", guard="status_lookup_not_owned")
+            return _Tool({"error": "not_found"}, True)
+        result = self.tools.read("get_booking_status", {"hold_id": hold_id, "idempotency_key": key}, run.budget, run.tracer)
         if not result.ok:
             return _Tool({"error": result.error}, True)
         return _Tool(result.data)
@@ -511,6 +546,10 @@ class Agent:
             run.tracer.event("guard_blocked", guard="duplicate_booking", booking_id=duplicate)
             return _Tool({"error": "duplicate_booking", "booking_id": duplicate,
                           "detail": "This slot is already booked for the user."}, True)
+        if self._find_unresolved(run.user_id, hold["provider_id"], hold["slot"]):
+            run.tracer.event("guard_blocked", guard="slot_outcome_unresolved", slot=hold["slot"])
+            return _Tool({"error": "outcome_unresolved",
+                          "detail": "An earlier attempt at this slot is still unverified. Don't propose it again."}, True)
         candidate = workflow.candidates.get(hold["provider_id"], {})
         details = {
             "provider_id": hold["provider_id"], "provider_name": candidate.get("name", hold["provider_id"]),
@@ -574,6 +613,12 @@ class Agent:
         earliest = workflow.request.get("earliest_time") or self.memory.preference(user_id, "earliest_time")
         latest = workflow.request.get("latest_time") or self.memory.preference(user_id, "latest_time")
         return earliest, latest
+
+    def _find_unresolved(self, user_id, provider_id, slot) -> bool:
+        rows = self.db.all("SELECT p.details FROM executions e JOIN proposals p ON p.id=e.proposal_id "
+                           "WHERE e.user_id=? AND e.action='book' AND e.status IN ('in_flight','unresolved')", (user_id,))
+        return any(json.loads(r["details"])["provider_id"] == provider_id and json.loads(r["details"])["slot"] == slot
+                   for r in rows)
 
     def _find_duplicate(self, run: _Run, provider_id, slot) -> str | None:
         result = self.tools.read("list_bookings", {"user_id": run.user_id}, run.budget, run.tracer)

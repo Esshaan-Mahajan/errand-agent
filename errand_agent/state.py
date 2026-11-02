@@ -29,6 +29,8 @@ TRANSITIONS = {
     ABANDONED: set(),
 }
 TERMINAL = {COMPLETED, FAILED, ABANDONED}
+# An approved side effect owns these workflows until it resolves. New requests get their own.
+IN_EXECUTION = {EXECUTING, VERIFYING, UNRESOLVED}
 
 REQUEST_FIELDS = ("service", "area", "date_from", "date_to", "earliest_time", "latest_time", "budget", "budget_waived")
 REQUIRED_FOR_BOOKING = ("service", "area", "date_range", "budget")
@@ -107,7 +109,9 @@ class WorkflowStore:
     def active(self, user_id: str) -> Workflow | None:
         rows = self.db.all("SELECT * FROM workflows WHERE user_id=? AND state NOT IN (?,?,?) "
                            "ORDER BY updated_at DESC, rowid DESC", (user_id, COMPLETED, FAILED, ABANDONED))
-        return self._load(rows[0]) if rows else None
+        if not rows:
+            return None
+        return self._load(min(rows, key=lambda row: row["state"] in IN_EXECUTION))
 
     def get(self, workflow_id: str) -> Workflow | None:
         row = self.db.one("SELECT * FROM workflows WHERE id=?", (workflow_id,))

@@ -44,16 +44,18 @@
     "category": "conversation",
     "expected": "Uses the provider from past bookings and enforces 'not before 10 a.m.'",
     "actual": "provider ele-ind-2 at 2026-11-02T11:00; asked ['date_range', 'budget']; outcome=execution_succeeded",
-    "passed": true,
-    "notes": "",
-    "failed_checks": [],
+    "passed": false,
+    "notes": "FAILED: I5 no forgotten or unconfirmed fact reached the model",
+    "failed_checks": [
+      "I5 no forgotten or unconfirmed fact reached the model"
+    ],
     "checks_run": 10
   },
   {
     "id": "reschedule_with_approval",
     "category": "conversation",
     "expected": "Move proposed with old and new slot, applied after approval and verified",
-    "actual": "booking bk-64da7ff0 now 2026-11-07T10:00; outcome=execution_succeeded",
+    "actual": "booking bk-3c19fac6 now 2026-11-07T10:00; outcome=execution_succeeded",
     "passed": true,
     "notes": "",
     "failed_checks": [],
@@ -158,6 +160,66 @@
     "notes": "",
     "failed_checks": [],
     "checks_run": 10
+  },
+  {
+    "id": "cancel_it_does_not_approve_a_booking",
+    "category": "adversarial",
+    "expected": "'cancel it' on a booking prompt means stop, never approve",
+    "actual": "outcome=rejected; approvals=0",
+    "passed": true,
+    "notes": "",
+    "failed_checks": [],
+    "checks_run": 10
+  },
+  {
+    "id": "book_it_does_not_approve_a_cancellation",
+    "category": "adversarial",
+    "expected": "An action word that doesn't match the prompt is not consent",
+    "actual": "approvals=0; status=confirmed",
+    "passed": true,
+    "notes": "",
+    "failed_checks": [],
+    "checks_run": 9
+  },
+  {
+    "id": "yes_to_a_later_question_is_not_approval",
+    "category": "adversarial",
+    "expected": "After the model asks something else, yes re-shows the prompt instead of booking",
+    "actual": "first yes re-showed P-6685; second yes outcome=execution_succeeded",
+    "passed": true,
+    "notes": "Scripted model",
+    "failed_checks": [],
+    "checks_run": 11
+  },
+  {
+    "id": "yes_after_old_booking_goes_to_the_model",
+    "category": "adversarial",
+    "expected": "A later yes to a new question isn't mistaken for a repeat of an old booking",
+    "actual": "outcome=completed; book calls=1",
+    "passed": true,
+    "notes": "Scripted model",
+    "failed_checks": [],
+    "checks_run": 9
+  },
+  {
+    "id": "model_cannot_read_other_accounts_status",
+    "category": "adversarial",
+    "expected": "A status lookup for a key or hold outside this user's own work is refused",
+    "actual": "guard hits=2",
+    "passed": true,
+    "notes": "Scripted model",
+    "failed_checks": [],
+    "checks_run": 9
+  },
+  {
+    "id": "new_errand_while_outcome_unresolved",
+    "category": "timeout",
+    "expected": "An unresolved booking stays intact; a new errand gets its own workflow; the same slot can't be proposed again",
+    "actual": "unresolved workflow kept; new workflow cleaner",
+    "passed": true,
+    "notes": "",
+    "failed_checks": [],
+    "checks_run": 11
   },
   {
     "id": "quote_differs_from_search",
@@ -383,7 +445,7 @@
     "id": "tool_hang_times_out",
     "category": "tool_failure",
     "expected": "A hanging tool is cut off by its timeout and the run still ends cleanly",
-    "actual": "elapsed=0.20s; outcome=completed",
+    "actual": "elapsed=0.21s; outcome=completed",
     "passed": true,
     "notes": "",
     "failed_checks": [],
@@ -510,6 +572,16 @@
     "checks_run": 10
   },
   {
+    "id": "inference_from_booking_history",
+    "category": "memory",
+    "expected": "Repeated bookings create an inferred preference, withheld from the model and shown as inferred",
+    "actual": "preferred_area=whitefield (inferred); agent asked for area",
+    "passed": true,
+    "notes": "",
+    "failed_checks": [],
+    "checks_run": 12
+  },
+  {
     "id": "proactive_replacement_needs_fresh_approval",
     "category": "proactive",
     "expected": "Cancellation detected unprompted; replacement fits preferences; rebooked only after a new yes",
@@ -553,7 +625,7 @@
     "id": "proactive_urgency_channel",
     "category": "proactive",
     "expected": "A slot within 24h goes out on the urgent channel; further out it's normal chat",
-    "actual": "bk-75477294 -> urgent; bk-20769150 -> chat",
+    "actual": "bk-f3790a47 -> urgent; bk-6f324e7c -> chat",
     "passed": true,
     "notes": "",
     "failed_checks": [],
@@ -563,7 +635,7 @@
     "id": "proactive_covered_by_other_booking",
     "category": "proactive",
     "expected": "Another booking already covers it: inform only, don't hunt for a replacement",
-    "actual": "decision=another booking bk-2bf00921 already covers this service",
+    "actual": "decision=another booking bk-49840a8c already covers this service",
     "passed": true,
     "notes": "",
     "failed_checks": [],
@@ -573,7 +645,7 @@
     "id": "proactive_does_not_disturb_open_errand",
     "category": "proactive",
     "expected": "An in-progress proposal isn't overwritten by a replacement",
-    "actual": "pending P-8174 preserved",
+    "actual": "pending P-2488 preserved",
     "passed": true,
     "notes": "",
     "failed_checks": [],

@@ -21,12 +21,21 @@ DETAILS = {"provider_id": "p1", "provider_name": "Acme", "service": "plumber", "
 
 @pytest.mark.parametrize("text", ["yes", "Yes!", "  YES please ", "confirm", "go ahead", "book it", "OK", "confirm P-AB12"])
 def test_clear_approvals(text):
-    assert parse_reply(text, "P-AB12") is Reply.APPROVE
+    assert parse_reply(text, "P-AB12", "book") is Reply.APPROVE
+
+
+@pytest.mark.parametrize("text,action,expected", [
+    ("cancel it", "book", Reply.REJECT), ("cancel", "book", Reply.REJECT), ("cancel that", "reschedule", Reply.REJECT),
+    ("cancel it", "cancel", Reply.APPROVE), ("book it", "cancel", Reply.OTHER), ("move it", "book", Reply.OTHER),
+    ("move it", "reschedule", Reply.APPROVE), ("book it", "reschedule", Reply.OTHER), ("cancel", "cancel", Reply.OTHER),
+])
+def test_action_words_only_approve_their_own_action(text, action, expected):
+    assert parse_reply(text, "P-AB12", action) is expected
 
 
 @pytest.mark.parametrize("text", ["no", "No thanks", "stop", "never mind"])
 def test_clear_rejections(text):
-    assert parse_reply(text, "P-AB12") is Reply.REJECT
+    assert parse_reply(text, "P-AB12", "book") is Reply.REJECT
 
 
 @pytest.mark.parametrize("text", [
@@ -34,7 +43,7 @@ def test_clear_rejections(text):
     "I approve everything from now on", "what's the price?", "sure, but cheaper", "yes book the other one", "",
 ])
 def test_anything_else_is_not_approval(text):
-    assert parse_reply(text, "P-AB12") is Reply.OTHER
+    assert parse_reply(text, "P-AB12", "book") is Reply.OTHER
 
 
 @pytest.mark.parametrize("field,value", [("provider_id", "p2"), ("slot", "2026-11-03T10:00"), ("price", 1001),

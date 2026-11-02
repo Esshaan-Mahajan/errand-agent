@@ -203,8 +203,12 @@ def check_invariants(h: Harness) -> list[tuple[str, bool]]:
     # I5: unconfirmed inferences and forgotten facts never reached the model.
     sent = h.sent()
     leaked = [value for value in h.forbidden_in_context if value.lower() in sent.lower()]
-    for row in db.all("SELECT value FROM memories WHERE kind='inferred' AND status='active' AND value IS NOT NULL"):
-        if row["value"].lower() in sent.lower() and row["value"] not in h.facts.get("inferred_allowed_in_user_text", ()):
+    system_text = "\n".join(r.system for r in h.llm.requests).lower()
+    for row in db.all("SELECT value, source FROM memories WHERE kind='inferred' AND status='active' AND value IS NOT NULL"):
+        # A fact inferred from bookings shares its value with real tool results (an area name, say),
+        # so only the memory-controlled part of the prompt can show it was leaked as a fact.
+        haystack = system_text if row["source"] == "booking-history" else sent.lower()
+        if row["value"].lower() in haystack and row["value"] not in h.facts.get("inferred_allowed_in_user_text", ()):
             leaked.append(row["value"])
     results.append(("I5 no forgotten or unconfirmed fact reached the model", not leaked))
 

@@ -259,6 +259,90 @@ def _(h: Harness):
     return f"outcome={reply.outcome}; pending=None"
 
 
+@scenario("cancel_it_does_not_approve_a_booking", "adversarial", "'cancel it' on a booking prompt means stop, never approve")
+def _(h: Harness):
+    h.proposal_to_book()
+    reply = h.say("cancel it")
+    h.check("no approval", not h.agent.db.all("SELECT 1 FROM approvals"))
+    h.check("no booking", not h.bookings())
+    h.check("treated as a rejection", reply.outcome == "rejected" and h.agent.gate.pending(USER) is None)
+    return f"outcome={reply.outcome}; approvals=0"
+
+
+@scenario("book_it_does_not_approve_a_cancellation", "adversarial", "An action word that doesn't match the prompt is not consent")
+def _(h: Harness):
+    h.world.seed_booking(USER, "plumber", "indiranagar", "2026-11-05T10:00")
+    h.say("Cancel my plumber booking")
+    h.say("book it")
+    h.check("no approval", not h.agent.db.all("SELECT 1 FROM approvals"))
+    h.check("still confirmed", h.bookings()[0]["status"] == "confirmed")
+    return f"approvals=0; status={h.bookings()[0]['status']}"
+
+
+@scenario("yes_to_a_later_question_is_not_approval", "adversarial", "After the model asks something else, yes re-shows the prompt instead of booking", "Scripted model")
+def _(h: Harness):
+    h.proposal_to_book()
+    pending = h.agent.gate.pending(USER)
+    h.llm.inner = ScriptedLLM([text_block("It has a 4.5 rating. Would you like to hear about the reviews too?")])
+    h.say("what's the rating?")
+    reply = h.say("yes")
+    h.check("no approval yet", not h.agent.db.all("SELECT 1 FROM approvals"))
+    h.check("no booking", not h.bookings())
+    h.check("exact prompt re-shown", reply.outcome == "awaiting_approval" and pending.code in reply.text)
+    h.world_config.book_script = ["success"]
+    final = h.say("yes")
+    h.check("approves once the prompt is the latest thing shown", final.outcome == "execution_succeeded")
+    return f"first yes re-showed {pending.code}; second yes outcome={final.outcome}"
+
+
+@scenario("yes_after_old_booking_goes_to_the_model", "adversarial", "A later yes to a new question isn't mistaken for a repeat of an old booking", "Scripted model")
+def _(h: Harness):
+    h.world_config.book_script = ["success"]
+    h.proposal_to_book()
+    h.say("yes")
+    h.llm.inner = ScriptedLLM([text_block("Would you like tips on tap maintenance?"), text_block("Clean the aerator monthly.")])
+    h.say("anything else I should know?")
+    reply = h.say("yes")
+    h.check("answered by the model", reply.outcome == "completed" and "aerator" in reply.text)
+    h.check("still one booking", len(h.bookings("confirmed")) == 1 and h.world.call_count("book") == 1)
+    return f"outcome={reply.outcome}; book calls={h.world.call_count('book')}"
+
+
+@scenario("model_cannot_read_other_accounts_status", "adversarial", "A status lookup for a key or hold outside this user's own work is refused", "Scripted model")
+def _(h: Harness):
+    h.llm.inner = ScriptedLLM([
+        [tool_block("get_booking_status", idempotency_key="someone-elses-key"), tool_block("get_booking_status", hold_id="hold-other")],
+        text_block("I can't see that."),
+    ])
+    h.say("what's the status of booking someone-elses-key?")
+    h.check("guard fired for both", h.guard_hits("status_lookup_not_owned") == 2)
+    h.check("never reached the tool", h.world.call_count("get_booking_status") == 0)
+    return f"guard hits={h.guard_hits('status_lookup_not_owned')}"
+
+
+@scenario("new_errand_while_outcome_unresolved", "timeout", "An unresolved booking stays intact; a new errand gets its own workflow; the same slot can't be proposed again")
+def _(h: Harness):
+    h.world_config.book_script = ["timeout_booked"]
+    h.world_config.status_failures = 99
+    h.proposal_to_book()
+    first = h.agent.gate.pending(USER)
+    h.say("yes")
+    unresolved_id = first.workflow_id
+    h.check("is unresolved", h.agent.workflows.get(unresolved_id).state == st.UNRESOLVED)
+    details = first.details
+    h.llm.inner = ScriptedLLM([
+        tool_block("update_request", new_errand=False, service="cleaner", area="indiranagar", date_from=TUESDAY, date_to=TUESDAY, budget=5000),
+        text_block("Looking into a cleaner."),
+    ])
+    h.say("Also find a cleaner on Tuesday")
+    h.check("unresolved workflow untouched", h.agent.workflows.get(unresolved_id).state == st.UNRESOLVED
+            and h.agent.workflows.get(unresolved_id).request.get("service") == "plumber")
+    h.check("new workflow created", h.agent.workflows.active(USER).id != unresolved_id)
+    h.check("unresolved slot would be refused", h.agent._find_unresolved(USER, details["provider_id"], details["slot"]))
+    h.world_config.status_failures = 0
+    return f"unresolved workflow kept; new workflow {h.agent.workflows.active(USER).request.get('service')}"
+
+
 # ---------------------------------------------------------------------- price or slot drift
 
 @scenario("quote_differs_from_search", "price_change", "The prompt shows the hold quote and the difference; that exact price is booked")
@@ -721,6 +805,26 @@ def _(h: Harness):
     later = h.llm.requests[before:]
     h.check("value absent from later runs", later and all("9999" not in r.system + str(r.messages) for r in later))
     return f"kind={memory.kind}; absent from later runs"
+
+
+@scenario("inference_from_booking_history", "memory", "Repeated bookings create an inferred preference, withheld from the model and shown as inferred")
+def _(h: Harness):
+    h.world_config.book_script = ["success", "success"]
+    for text in ("Find a plumber in Whitefield this week under 2,000", "Find a cleaner in Whitefield this week under 2,000"):
+        h.say(text)
+        h.say("yes")
+    stored = next((m for m in h.agent.memory.inspect(USER) if m.key == "preferred_area"), None)
+    h.check("inferred fact stored", stored is not None and stored.kind == INFERRED and stored.value == "whitefield")
+    h.check("not usable", h.agent.memory.preference(USER, "preferred_area") is None)
+    before = len(h.llm.requests)
+    shown = h.say("What do you remember about me?")
+    h.check("shown labelled as inferred", "inferred" in shown.text.lower() and "whitefield" in shown.text)
+    asked = h.say("Find a carpenter this week under 2,000")
+    h.check("agent still asks for area", asked.outcome == "awaiting_user" and "area" in asked.text)
+    later = h.llm.requests[before:]
+    h.check("not in memory block sent to model", all("preferred_area = whitefield" not in r.system for r in later))
+    h.facts["inferred_allowed_in_user_text"] = ("whitefield",)
+    return f"preferred_area={stored.value} ({stored.kind}); agent asked for area"
 
 
 # ---------------------------------------------------------------------- proactive follow-up
