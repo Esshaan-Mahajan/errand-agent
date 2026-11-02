@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .factory import DEMO_SCENARIOS, build_agent, live_available
+from .factory import DEMO_SCENARIOS, LIVE_KEY_HELP, build_agent, live_available
 from .followup import FollowUpMonitor
 
 USER = "user-1"
@@ -159,15 +159,15 @@ def make_handler(app: App):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Errand agent demo UI.")
-    parser.add_argument("--live", action="store_true", help="use the real model (needs ANTHROPIC_API_KEY)")
+    parser.add_argument("--live", action="store_true", help="use the real model (needs OPENAI_API_KEY)")
     parser.add_argument("--model")
     parser.add_argument("--scenario", default="timeout-after-success", choices=sorted(DEMO_SCENARIOS))
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--data", default="data/web")
     parser.add_argument("--traces", default="traces")
     args = parser.parse_args()
-    if args.live and not live_available():
-        print("--live needs ANTHROPIC_API_KEY to be set.", file=sys.stderr)
+    if args.live and not live_available(args.model):
+        print(LIVE_KEY_HELP, file=sys.stderr)
         return 2
     app = App(args.data, args.traces, args.live, args.model, args.scenario)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(app))

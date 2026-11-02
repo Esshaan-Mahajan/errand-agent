@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .factory import DEMO_SCENARIOS, build_agent, live_available
+from .factory import DEMO_SCENARIOS, LIVE_KEY_HELP, build_agent, live_available
 from .followup import FollowUpMonitor
 
 USER = "user-1"
@@ -18,14 +18,14 @@ Anything else goes to the agent. Example: Find a plumber for my kitchen tap this
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Chat with the errand agent.")
-    parser.add_argument("--live", action="store_true", help="use the real model (needs ANTHROPIC_API_KEY)")
+    parser.add_argument("--live", action="store_true", help="use the real model (needs OPENAI_API_KEY)")
     parser.add_argument("--model", help="model ID to use with --live")
     parser.add_argument("--scenario", default="default", choices=sorted(DEMO_SCENARIOS))
     parser.add_argument("--data", default="data/cli", help="directory for persistent state")
     args = parser.parse_args()
 
-    if args.live and not live_available():
-        print("--live needs ANTHROPIC_API_KEY to be set.", file=sys.stderr)
+    if args.live and not live_available(args.model):
+        print(LIVE_KEY_HELP, file=sys.stderr)
         return 2
     agent = build_agent(args.data, live=args.live, model=args.model, scenario=args.scenario)
     monitor = FollowUpMonitor(agent)

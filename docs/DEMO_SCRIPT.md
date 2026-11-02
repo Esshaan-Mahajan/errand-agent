@@ -7,7 +7,7 @@ The assignment asks for a screen recording, posted on Loom or as an unlisted You
 Use the real model if you can. It's what the assignment means by "real LLM", and the UI labels which model is running.
 
 ```bash
-export ANTHROPIC_API_KEY=your-key
+export OPENAI_API_KEY=your-key
 python -m errand_agent.web --live --data data/demo --traces data/demo-traces
 ```
 

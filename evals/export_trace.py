@@ -1,7 +1,7 @@
 """Produce the end-to-end trace deliverable: one booking conversation with a timeout-after-success.
 
     python -m evals.export_trace          offline stand-in model
-    python -m evals.export_trace --live   the real model (needs ANTHROPIC_API_KEY)
+    python -m evals.export_trace --live   the real model (needs OPENAI_API_KEY)
 
 All the runs in the conversation are concatenated, in order, into one raw JSONL file.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 
 from errand_agent.agent import Agent
 from errand_agent.clock import FakeClock
-from errand_agent.factory import live_available, make_llm
+from errand_agent.factory import LIVE_KEY_HELP, live_available, make_llm
 from errand_agent.mocks import WorldConfig
 
 USER = "user-1"
@@ -26,12 +26,13 @@ OUTPUT = Path("docs/trace_timeout_after_success.jsonl")
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--live", action="store_true")
+    parser.add_argument("--model", help="model ID to use with --live")
     parser.add_argument("--output", type=Path, default=OUTPUT)
     args = parser.parse_args()
-    if args.live and not live_available():
-        print("--live needs ANTHROPIC_API_KEY to be set.", file=sys.stderr)
+    if args.live and not live_available(args.model):
+        print(LIVE_KEY_HELP, file=sys.stderr)
         return 2
-    llm, name = make_llm(args.live)
+    llm, name = make_llm(args.live, args.model)
     work = Path(tempfile.mkdtemp(prefix="errand-trace-"))
     agent = Agent(work, llm, clock=FakeClock(), user_id=USER, model_name=name, trace_dir=work / "traces",
                   world_config=WorldConfig(book_script=["timeout_booked"]))

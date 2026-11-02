@@ -3,14 +3,13 @@ from __future__ import annotations
 
 import anthropic
 
-from ..config import DEFAULT_MODEL
 from .base import LLMError, LLMRequest, LLMResponse
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
 class AnthropicLLM:
-    def __init__(self, model: str = DEFAULT_MODEL, *, timeout_s: float = 30.0, effort: str = "medium",
+    def __init__(self, model: str = "claude-opus-5-5", *, timeout_s: float = 30.0, effort: str = "medium",
                  base_url: str | None = None, api_key: str | None = None):
         self.model = model
         self.effort = effort

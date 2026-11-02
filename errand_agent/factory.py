@@ -10,6 +10,8 @@ from .config import DEFAULT_MODEL
 from .llm.offline import StandInModel
 from .mocks import WorldConfig
 
+LIVE_KEY_HELP = "--live needs OPENAI_API_KEY to be set (ANTHROPIC_API_KEY for claude- models)."
+
 # Named failure scenarios for the demo. Each one scripts the mock world, nothing else.
 DEMO_SCENARIOS = {
     "default": WorldConfig(),
@@ -27,9 +29,12 @@ DEMO_SCENARIOS = {
 def make_llm(live: bool, model: str | None = None, scenario: str = "default"):
     if not live:
         return StandInModel(gullible=scenario == "prompt-injection"), "standin-offline"
-    from .llm.anthropic_client import AnthropicLLM
     name = model or DEFAULT_MODEL
-    return AnthropicLLM(model=name), name
+    if name.startswith("claude-"):
+        from .llm.anthropic_client import AnthropicLLM
+        return AnthropicLLM(model=name), name
+    from .llm.openai_client import OpenAILLM
+    return OpenAILLM(model=name), name
 
 
 def build_agent(data_dir: str | Path, *, live: bool = False, model: str | None = None, scenario: str = "default",
@@ -40,5 +45,7 @@ def build_agent(data_dir: str | Path, *, live: bool = False, model: str | None =
                  model_name=name, on_trace_event=on_trace_event)
 
 
-def live_available() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+def live_available(model: str | None = None) -> bool:
+    if (model or DEFAULT_MODEL).startswith("claude-"):
+        return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+    return bool(os.environ.get("OPENAI_API_KEY"))

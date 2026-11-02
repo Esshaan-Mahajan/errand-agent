@@ -16,7 +16,7 @@ This is a summary, written by the assistant from its own account of the session.
 
 ## What the assistant could not do
 
-- **Run the real model.** No API key was available, so the live path was tested only against a local server speaking the Messages format.
+- **Run the real model.** No API key was available, so the live path was tested only against local servers speaking each API's format. The live default moved from Anthropic to OpenAI because the author's credit is with OpenAI.
 - **Record the demo.** Screen recording and upload are left to the author. See [DEMO_SCRIPT.md](DEMO_SCRIPT.md).
 
 ## Where it needed correcting

@@ -1,6 +1,7 @@
 """Hard limits and static configuration. Every bound the agent obeys lives here."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 
@@ -29,10 +30,13 @@ class Limits:
     max_holds_per_workflow: int = 5
 
 
-DEFAULT_MODEL = "claude-opus-5-5"
+DEFAULT_MODEL = "gpt-6.1-terra"
 
 # USD per million tokens (input, output). Used only for the trace's cost estimate.
 PRICING = {
+    "gpt-6.1-terra": (1.00, 5.00),
+    "gpt-6.1-sol": (2.00, 10.00),
+    "gpt-6-luna": (0.10, 0.50),
     "claude-opus-5-5": (4.00, 20.00),
     "claude-sonnet-5-5": (2.00, 10.00),
     "claude-haiku-5-5": (0.10, 0.50),
@@ -41,7 +45,8 @@ PRICING = {
 
 def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
     """Return the estimated cost, or None for models with no price (offline stand-ins)."""
-    price = PRICING.get(model)
+    # A response can name a dated snapshot of the model that was requested.
+    price = PRICING.get(model) or PRICING.get(re.sub(r"-\d{4}-\d{2}-\d{2}$", "", model))
     if price is None:
         return None
     return round((input_tokens * price[0] + output_tokens * price[1]) / 1_000_000, 6)

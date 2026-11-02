@@ -19,11 +19,11 @@ A chat agent that arranges home-service errands: it clarifies missing details, c
 ## Verification status
 
 - **Verified offline:** the full test suite and every eval scenario, against scripted, rules-based and deliberately misbehaving models.
-- **Verified against a local fake server:** the real Anthropic SDK adapter, covering request shape, tool-use round trips, thinking-block replay and error mapping.
+- **Verified against a local fake server:** the real OpenAI SDK adapter, covering request shape, tool-call round trips, reasoning replay and error mapping.
 - **Not yet verified:** the agent with the real model. No API key was available while building, so the live path has never run against the real API. Run this first:
 
 ```bash
-export ANTHROPIC_API_KEY=your-key
+export OPENAI_API_KEY=your-key
 python -m evals.export_trace --live --output docs/trace_live.jsonl
 ```
 
@@ -57,7 +57,7 @@ python -m errand_agent.web
 python -m errand_agent.cli --scenario timeout-after-success
 ```
 
-**Use the real model** by adding `--live` to either command, with `ANTHROPIC_API_KEY` set. The default model is `claude-opus-5-5`; use `--model` to change it.
+**Use the real model** by adding `--live` to either command, with `OPENAI_API_KEY` set. The default model is `gpt-6.1-terra`; use `--model` to change it.
 
 Without `--live`, the agent runs on a rules-based stand-in. It's labelled in the UI and the trace, and it is not an LLM.
 
@@ -85,11 +85,13 @@ The UI's scenario menu scripts failures such as `timeout-after-success`, `slot-t
 | Context management | [context.py](errand_agent/context.py) | Fixed token budget; exclusions logged each turn |
 | Agent loop | [agent.py](errand_agent/agent.py), [tool_schemas.py](errand_agent/tool_schemas.py) | Side-effect tools aren't exposed to the model |
 | Offline models | [llm/offline.py](errand_agent/llm/offline.py) | Scripted, rules-based and adversarial |
-| Real model | [llm/anthropic_client.py](errand_agent/llm/anthropic_client.py) | Official SDK, with server-side refusal fallback enabled |
+| Real model | [llm/openai_client.py](errand_agent/llm/openai_client.py) | Official SDK, Responses API, nothing stored server-side |
 
 ## Model configuration
 
-The live path uses `claude-opus-5-5` at `medium` effort with adaptive thinking, through a manual tool loop, because each turn has to pass the context budget and guards. It also turns on the API's server-side refusal fallback (`fallbacks: "default"`), so a safety-classifier refusal reruns on a fallback model. To remove that, delete `betas` and `fallbacks` in `anthropic_client.py` and call `client.messages.create`. A refusal that still comes back is reported to the user as its own outcome.
+The live path uses `gpt-6.1-terra` at `low` reasoning effort through OpenAI's Responses API, with a manual tool loop, because each turn has to pass the context budget and guards. It sets `store: false`, so the conversation isn't kept for later retrieval. Encrypted reasoning items are replayed within a run but held only in memory, so they never reach traces, where forget couldn't scrub them. A refusal is reported to the user as its own outcome.
+
+`--model` also accepts other OpenAI models. A `claude-` model ID switches to the Anthropic adapter ([anthropic_client.py](errand_agent/llm/anthropic_client.py)), which needs `ANTHROPIC_API_KEY` and `pip install -e ".[anthropic]"`. That adapter is tested against a fake server only.
 
 ## Known limitations
 

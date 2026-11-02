@@ -2,8 +2,8 @@
 
 Everything sent to the model passes through here. The prefix (system prompt, memories, history) is
 built once per run and then frozen, and tool exchanges are only appended. That keeps the prefix
-valid for replayed thinking blocks, which the API rejects if earlier turns change. It also means a
-forget or correction ends the run, so the next run gets a clean prefix.
+valid for replayed reasoning, which has to go back unchanged. It also means a forget or correction
+ends the run, so the next run gets a clean prefix.
 """
 from __future__ import annotations
 

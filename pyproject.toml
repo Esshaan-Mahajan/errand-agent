@@ -10,8 +10,9 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-live = ["anthropic>=2.0"]
-dev = ["pytest>=8", "anthropic>=2.0"]
+live = ["openai>=3.0"]
+anthropic = ["anthropic>=2.0"]
+dev = ["pytest>=8", "openai>=3.0", "anthropic>=2.0"]
 
 [tool.setuptools.packages.find]
 include = ["errand_agent*", "evals*"]
