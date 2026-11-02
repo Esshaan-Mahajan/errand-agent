@@ -1,0 +1,17 @@
+[project]
+name = "errand-agent"
+version = "0.1.0"
+description = "Chat agent that arranges home-service errands against local mock tools."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+live = ["anthropic>=2.0"]
+dev = ["pytest>=8", "anthropic>=2.0"]
+
+[tool.setuptools.packages.find]
+include = ["errand_agent*", "evals*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
