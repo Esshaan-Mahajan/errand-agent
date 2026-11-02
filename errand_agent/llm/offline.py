@@ -116,6 +116,9 @@ class StandInModel:
         ranked = self._rank(view, result.get("providers", []))
         if not ranked:
             return [text_block("I found no providers matching your constraints. Could you widen the dates or budget?")]
+        if self.gullible:
+            # Mock search results list the provider carrying the injected review first.
+            return [tool_block("get_provider", provider_id=result["providers"][0]["id"])]
         return [tool_block("get_provider", provider_id=ranked[0]["id"])]
 
     def _after_get_provider(self, view, result) -> list[dict]:

@@ -21,7 +21,7 @@ def make_agent(tmp_path, **kwargs):
     return Agent(tmp_path, llm, clock=FakeClock(), user_id=USER, trace_dir=tmp_path / "traces", **kwargs), llm
 
 
-# Bug 1: book() opened a nested BEGIN through its counter helper, so every scripted book raised
+# Bug 3: book() opened a nested BEGIN through its counter helper, so every scripted book raised
 # sqlite3.OperationalError, which the agent reported as a verified failure. The mock never committed.
 
 def test_transaction_blocks_can_nest(tmp_path):
@@ -54,7 +54,7 @@ def test_scripted_timeout_after_success_really_commits(tmp_path):
     assert len(world.bookings(USER)) == 1
 
 
-# Bug 2: the unverified-success guard matched "Nothing has been booked" and replaced honest failure
+# Also found: the unverified-success guard matched "Nothing has been booked" and replaced honest failure
 # messages, including over-budget and search-outage explanations, with a generic line.
 
 @pytest.mark.parametrize("honest", [
@@ -84,7 +84,7 @@ def test_claim_guard_still_blocks_false_claims(tmp_path, claim):
     assert agent._guard_final_text(claim, run) != claim
 
 
-# Bug 3: a memory inspection showed inferred facts to the user, then was stored as an ordinary
+# Bug 2: a memory inspection showed inferred facts to the user, then was stored as an ordinary
 # assistant message, so the next turn's history carried unconfirmed facts to the model.
 
 def test_inspection_reply_never_enters_model_context(tmp_path):
@@ -107,7 +107,7 @@ def test_inspection_reply_stays_private_after_the_fact_is_confirmed(tmp_path):
     assert agent.db.one("SELECT private FROM messages WHERE role='assistant'")["private"] == 1
 
 
-# Bug 4: relevance scoring tokenised the budget "1,500" into "1" and "500", so it matched memories
+# Also found: relevance scoring tokenised the budget "1,500" into "1" and "500", so it matched memories
 # such as misc_fact_1 and sent irrelevant facts to the model.
 
 def test_numbers_do_not_make_a_memory_relevant(tmp_path):
@@ -121,7 +121,7 @@ def test_numbers_do_not_make_a_memory_relevant(tmp_path):
     assert len(chosen.excluded["irrelevant"]) == 1
 
 
-# Bug 5: approval phrases ignored the proposal's action, so "cancel it" (meaning stop) on a booking
+# Bug 1: approval phrases ignored the proposal's action, so "cancel it" (meaning stop) on a booking
 # prompt counted as consent and booked the plumber.
 
 def test_cancel_it_on_a_booking_prompt_does_not_book(tmp_path):
@@ -144,7 +144,7 @@ def test_forgotten_preference_is_not_inferred_back(tmp_path):
     assert agent.memory.inspect(USER) == []
 
 
-# Bug 6: the phone pattern counted characters, not digits, so every ISO date in every trace became
+# Also found: the phone pattern counted characters, not digits, so every ISO date in every trace became
 # "[phone]". Spotted by eye in the live trace pane; no test looked at trace contents until then.
 
 @pytest.mark.parametrize("kept", ["2026-11-03", "2026-11-03T09:00", "2026-11-02T09:10:00", "1500", "bk-12345678", "hold-97d3986c6f"])

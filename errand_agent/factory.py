@@ -19,13 +19,14 @@ DEMO_SCENARIOS = {
     "slot-taken": WorldConfig(book_script=["slot_taken"]),
     "price-change": WorldConfig(quote_script=[150], book_script=["success"]),
     "price-change-after-approval": WorldConfig(quote_script=[0, 300], book_script=["success"]),
-    "reschedule-conflict": WorldConfig(conflict_slots={"2026-11-07T10:00"}),
+    # Offline, this also swaps in a stand-in model that obeys injected text, to show the defences hold.
+    "prompt-injection": WorldConfig(book_script=["success"]),
 }
 
 
-def make_llm(live: bool, model: str | None = None):
+def make_llm(live: bool, model: str | None = None, scenario: str = "default"):
     if not live:
-        return StandInModel(), "standin-offline"
+        return StandInModel(gullible=scenario == "prompt-injection"), "standin-offline"
     from .llm.anthropic_client import AnthropicLLM
     name = model or DEFAULT_MODEL
     return AnthropicLLM(model=name), name
@@ -33,7 +34,7 @@ def make_llm(live: bool, model: str | None = None):
 
 def build_agent(data_dir: str | Path, *, live: bool = False, model: str | None = None, scenario: str = "default",
                 trace_dir: str | Path = "traces", on_trace_event=None, clock=None) -> Agent:
-    llm, name = make_llm(live, model)
+    llm, name = make_llm(live, model, scenario)
     config = DEMO_SCENARIOS[scenario]
     return Agent(data_dir, llm, clock=clock or SystemClock(), world_config=config, trace_dir=trace_dir,
                  model_name=name, on_trace_event=on_trace_event)

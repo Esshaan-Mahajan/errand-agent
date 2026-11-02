@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "errand-agent"
 version = "0.1.0"
@@ -11,6 +15,9 @@ dev = ["pytest>=8", "anthropic>=2.0"]
 
 [tool.setuptools.packages.find]
 include = ["errand_agent*", "evals*"]
+
+[tool.setuptools.package-data]
+errand_agent = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
