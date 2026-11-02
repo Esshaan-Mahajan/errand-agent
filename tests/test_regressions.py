@@ -10,6 +10,7 @@ from errand_agent.db import AGENT_SCHEMA, Database
 from errand_agent.llm.offline import RecordingLLM, StandInModel
 from errand_agent.memory import EXPLICIT, INFERRED, MemoryStore, tokens_of
 from errand_agent.mocks import MockWorld, ToolTimeout, WorldConfig
+from errand_agent.sanitize import redact_pii
 from errand_agent.tools import RunBudget
 
 USER = "user-1"
@@ -141,3 +142,26 @@ def test_forgotten_preference_is_not_inferred_back(tmp_path):
     agent.memory.forget(memory)
     agent._infer_from_history(USER, agent.new_tracer(USER))
     assert agent.memory.inspect(USER) == []
+
+
+# Bug 6: the phone pattern counted characters, not digits, so every ISO date in every trace became
+# "[phone]". Spotted by eye in the live trace pane; no test looked at trace contents until then.
+
+@pytest.mark.parametrize("kept", ["2026-11-03", "2026-11-03T09:00", "2026-11-02T09:10:00", "1500", "bk-12345678", "hold-97d3986c6f"])
+def test_redaction_leaves_dates_and_ids_alone(kept):
+    assert redact_pii(kept) == kept
+
+
+@pytest.mark.parametrize("phone", ["+91 98123 45678", "9812345678", "98123-45678", "+1 415 555 0132"])
+def test_redaction_still_masks_phone_numbers(phone):
+    assert redact_pii(f"call {phone} today") == "call [phone] today"
+
+
+def test_stored_trace_keeps_dates_readable(tmp_path):
+    agent, _ = make_agent(tmp_path)
+    reply = agent.handle_message(USER, "Find a plumber in Indiranagar this week, mornings only, under 1,500.")
+    with open(reply.trace_path, encoding="utf-8") as handle:
+        text = handle.read()
+    assert '"start": "2026-11-02"' in text
+    assert "Monday 2026-11-02 09:00" in text
+    assert '"contact": "[phone]"' in text

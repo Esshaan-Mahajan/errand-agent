@@ -5,7 +5,8 @@ import re
 from typing import Any
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
-_PHONE = re.compile(r"(?<![\w-])\+?\d[\d\s-]{8,}\d(?![\w-])")
+# Counts digits, not characters, and never starts on an ISO date ("2026-11-02 09:00" has ten digits).
+_PHONE = re.compile(r"(?<![\w-])(?!\d{4}-\d{2}-\d{2})\+?\d(?:[\s-]?\d){9,14}(?![\w-])")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f​-‏‪-‮⁦-⁩]")
 _SAFE_LABEL = re.compile(r"[^\w .,&'()-]")
 
