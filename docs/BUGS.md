@@ -34,3 +34,4 @@ These are real too, but smaller. Each has a regression test or scenario.
 | Phone redaction turned every ISO date in every trace into `[phone]` | Seen by eye in the live trace pane; no test read trace contents | Count digits, not characters, and never start on an ISO date |
 | A `yes` to a later, unrelated question approved the earlier pending proposal | Design review, then a failing scenario | The prompt must be the latest thing shown, or it's shown again |
 | A `yes` after any old booking got "already done" instead of answering the new question | Design review, then a failing scenario | A repeat only counts if it answers that execution's own result |
+| The real model's provider comparison, sent alongside `request_approval`, was dropped, so the user saw a bare prompt | First live run; the stand-in never writes text there | Shown above the code-rendered prompt; dropped if it claims success (`test_model_comparison_is_shown_above_the_approval_prompt`) |

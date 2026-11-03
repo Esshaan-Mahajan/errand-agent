@@ -265,6 +265,8 @@ class Agent:
                 ended = self._run_tools(uses, context, run_messages, run)
                 if ended is not None:
                     outcome, reply, proposal = ended
+                    if outcome == "awaiting_approval":
+                        reply = self._approval_commentary(response.text, run) + reply
                     return self._finish(user_id, tracer, outcome, prefix_text + reply, proposal=proposal)
         except BudgetExceeded as exc:
             tracer.event("limit_reached", code=exc.code, detail=exc.detail, scope="run",
@@ -337,6 +339,16 @@ class Agent:
                 ended = (*outcome.end, outcome.proposal)
         run_messages.append({"role": "user", "content": results})
         return ended
+
+    def _approval_commentary(self, text: str, run: _Run) -> str:
+        """The model's reasoning for its pick goes above the code-rendered prompt, never in place of it.
+        Nothing has happened yet at this point, so any success claim drops the commentary."""
+        if not text:
+            return ""
+        if _claims_success(text):
+            run.tracer.event("guard_blocked", guard="claim_before_approval", text=text[:300])
+            return ""
+        return text + "\n\n"
 
     def _guard_final_text(self, text: str, run: _Run) -> str:
         """The model never gets to report a side effect, however confident it sounds."""

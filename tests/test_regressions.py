@@ -165,3 +165,39 @@ def test_stored_trace_keeps_dates_readable(tmp_path):
     assert '"start": "2026-11-02"' in text
     assert "Monday 2026-11-02 09:00" in text
     assert '"contact": "[phone]"' in text
+
+
+# Found in the first live run: the real model explained its pick in text sent alongside request_approval,
+# and the agent dropped it, so the user saw a bare prompt with no comparison. The stand-in never does this.
+
+class CommentingModel:
+    """The stand-in, plus the text a real model writes next to its request_approval call."""
+
+    def __init__(self, commentary):
+        self.inner = StandInModel()
+        self.commentary = commentary
+
+    def complete(self, request):
+        response = self.inner.complete(request)
+        if any(use["name"] == "request_approval" for use in response.tool_uses):
+            response.content = [{"type": "text", "text": self.commentary}] + response.content
+        return response
+
+
+def test_model_comparison_is_shown_above_the_approval_prompt(tmp_path):
+    comparison = "AquaFix is rated 4.7 and costs 1,050. HomeFlow is cheaper but rated 4.3."
+    agent, _ = make_agent(tmp_path, llm=CommentingModel(comparison), world_config=WorldConfig(book_script=["success"]))
+    prompt = agent.handle_message(USER, "Find a plumber in Indiranagar this week, mornings only, under 1,500.")
+    assert prompt.outcome == "awaiting_approval"
+    assert prompt.text.startswith(comparison + "\n\n") and "Please confirm this booking" in prompt.text
+    assert agent.handle_message(USER, "yes").outcome == "execution_succeeded"
+    assert len(agent.world.bookings(USER)) == 1
+
+
+def test_success_claim_next_to_an_approval_request_is_dropped(tmp_path):
+    agent, _ = make_agent(tmp_path, llm=CommentingModel("Your plumber has been booked!"))
+    prompt = agent.handle_message(USER, "Find a plumber in Indiranagar this week, mornings only, under 1,500.")
+    assert prompt.outcome == "awaiting_approval"
+    assert prompt.text.startswith("Please confirm this booking") and "has been booked" not in prompt.text
+    with open(prompt.trace_path, encoding="utf-8") as handle:
+        assert "claim_before_approval" in handle.read()

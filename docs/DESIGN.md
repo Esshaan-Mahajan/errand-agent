@@ -12,18 +12,18 @@
 
 **Observability.** One JSONL per run: transitions, each turn's full context with included and excluded memory IDs and reasons, model calls (latency, tokens, cost), tool calls (arguments, sanitised results), guard blocks and outcomes. Hard limits (8 model turns, 16 tool calls, 90 s, per-call timeouts) all end in a user-facing message.
 
-**Annotated trace** ([raw file](trace_timeout_after_success.jsonl), offline stand-in model, run `…6dc7ca`, timeout-after-success):
+**Annotated trace** ([raw file](trace_live.jsonl), live `gpt-6.1-terra`, run `…7a6017`, timeout-after-success):
 
 ```text
 3  reply_classified  verdict=approve              ← code read "yes"; no model call in this run
-4  approval_recorded key=book-281b4a5a-e5e6403e…  ← durable before any side effect
+4  approval_recorded key=book-ac4056da-e5e6403e…  ← durable before any side effect
 5  state             AWAITING_APPROVAL→EXECUTING
 6  tool book         ok=false error=timeout       ← ambiguous: it may have committed
 7  state             EXECUTING→VERIFYING          ← no retry and no claim yet
-8  tool get_booking_status → booked bk-50856d27   ← source of truth: it did commit
+8  tool get_booking_status → booked bk-5fce314e   ← source of truth: it did commit
 9  state             VERIFYING→COMPLETED
 10 side_effect_verified                           ← only now may success be reported
 12 run_end execution_succeeded, 0 model calls     ← book was called exactly once
 ```
 
-**Evals.** Generated [table](../evals/results/EVAL_TABLE.md); seven invariants re-derived from raw records after every scenario. **Not verified:** real-model behaviour. Offline evals prove the guardrails, not reasoning quality; the OpenAI adapter is tested against a local Responses-format server.
+**Evals.** Generated [table](../evals/results/EVAL_TABLE.md); seven invariants re-derived from raw records after every scenario. **Live check:** one real-model conversation (7 model calls, $0.015; real input tokens 53–82% of the estimate). Offline evals prove the guardrails, not reasoning quality.
