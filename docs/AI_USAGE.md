@@ -17,7 +17,7 @@ This is a summary, written by the assistant from its own account of the session.
 ## What the assistant could not do
 
 - **Run the real model, at first.** No API key was available while building, so the live path was tested only against local servers. The live default moved from Anthropic to OpenAI because the author's credit is with OpenAI; once the author supplied a key, one live run found a bug (the model's comparison was dropped), fixed with a regression test.
-- **Record the demo.** Screen recording and upload are left to the author. See [DEMO_SCRIPT.md](DEMO_SCRIPT.md).
+- **Record the demo.** The author recorded it (linked from the README); the assistant wrote and rehearsed the [script](DEMO_SCRIPT.md).
 
 ## Where it needed correcting
 
