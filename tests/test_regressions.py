@@ -180,7 +180,7 @@ class CommentingModel:
     def complete(self, request):
         response = self.inner.complete(request)
         if any(use["name"] == "request_approval" for use in response.tool_uses):
-            response.content = [{"type": "text", "text": self.commentary}] + response.content
+            response.content = [{"type": "text", "text": self.commentary}] + response.tool_uses
         return response
 
 

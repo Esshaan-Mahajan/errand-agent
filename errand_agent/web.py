@@ -57,6 +57,11 @@ class App:
 
     def send(self, text: str) -> dict:
         self.chat.append({"role": "user", "text": text})
+        if text.strip().startswith("/"):
+            self.chat.append({"role": "agent", "tag": "ui",
+                              "text": "Commands like /trace are for the terminal chat. Here the trace is the panel on "
+                                      "the right, and the buttons above it simulate events."})
+            return {"outcome": "ui_command"}
         reply = self.agent.handle_message(USER, text)
         self.chat.append({"role": "agent", "text": reply.text, "tag": f"{reply.outcome}, state {reply.state or 'none'}"})
         return {"outcome": reply.outcome}
@@ -171,8 +176,13 @@ def main() -> int:
         return 2
     app = App(args.data, args.traces, args.live, args.model, args.scenario)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(app))
-    print(f"Errand agent demo: http://127.0.0.1:{args.port}", flush=True)
-    server.serve_forever()
+    print(f"Errand agent demo: http://127.0.0.1:{args.port} (Ctrl+C to stop)", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("Stopped.")
+    finally:
+        server.server_close()
     return 0
 
 

@@ -203,3 +203,58 @@ def test_provider_names_are_reduced_to_safe_labels():
 
 def test_traces_redact_contact_details():
     assert redact({"a": "call +91 98123 45678 or me@example.com"}) == {"a": "call [phone] or [email]"}
+
+
+# The offline stand-in answers sensibly outside its fixed vocabulary, so the offline demo isn't a dead end.
+
+def _standin_agent(tmp_path):
+    from errand_agent.agent import Agent
+    from errand_agent.clock import FakeClock
+    from errand_agent.llm.offline import StandInModel
+    return Agent(tmp_path, StandInModel(), clock=FakeClock(), trace_dir=tmp_path / "traces")
+
+
+def test_standin_takes_an_unknown_area_as_the_answer(tmp_path):
+    agent = _standin_agent(tmp_path)
+    assert agent.handle_message("user-1", "Find a plumber this week under 1500").outcome == "awaiting_user"
+    reply = agent.handle_message("user-1", "Bandra")
+    assert reply.outcome == "awaiting_approval" and "Please confirm this booking" in reply.text
+    assert agent.workflows.active("user-1").request["area"] == "bandra"
+
+
+def test_standin_takes_a_bare_number_as_the_budget(tmp_path):
+    agent = _standin_agent(tmp_path)
+    agent.handle_message("user-1", "Find a cleaner in Whitefield tomorrow")
+    reply = agent.handle_message("user-1", "2,000")
+    assert reply.outcome == "awaiting_approval"
+    assert agent.workflows.active("user-1").request["budget"] == 2000
+
+
+def test_standin_explains_its_pick_before_the_prompt(tmp_path):
+    agent = _standin_agent(tmp_path)
+    reply = agent.handle_message("user-1", "Find a plumber in Indiranagar this week, mornings only, under 1,500.")
+    assert reply.outcome == "awaiting_approval"
+    assert "looks best: rated" in reply.text.split("Please confirm")[0]
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("hi", "Hi! I can arrange"),
+    ("I need you to find some laundry near me", "I can only arrange"),
+    ("asdf qwerty", "I didn't catch that"),
+])
+def test_standin_replies_helpfully_outside_its_vocabulary(tmp_path, text, expected):
+    reply = _standin_agent(tmp_path).handle_message("user-1", text)
+    assert expected in reply.text
+
+
+def test_standin_does_not_take_yes_or_no_as_an_area(tmp_path):
+    agent = _standin_agent(tmp_path)
+    agent.handle_message("user-1", "Find a plumber this week under 1500")
+    agent.handle_message("user-1", "no")
+    assert "area" not in agent.workflows.active("user-1").request
+
+
+def test_standin_remembers_an_area_it_does_not_know(tmp_path):
+    agent = _standin_agent(tmp_path)
+    agent.handle_message("user-1", "Remember my preferred area is Bandra")
+    assert agent.memory.preference("user-1", "preferred_area") == "bandra"

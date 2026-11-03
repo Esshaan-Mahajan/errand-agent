@@ -28,6 +28,11 @@ _SERVICES = [
 ]
 _AREAS = ["indiranagar", "koramangala", "whitefield", "jayanagar", "hsr"]
 _WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+_SUPPORTED = "a plumber, electrician, AC service, cleaner or carpenter"
+_EXAMPLE = "Find a plumber for my kitchen tap this week, mornings only, under 1,500."
+# Short replies that are never a place name, even when the agent has just asked for an area.
+_NOT_A_PLACE = {"yes", "no", "ok", "okay", "sure", "nope", "yeah", "yep", "hi", "hello", "hey", "thanks",
+                "thank you", "stop", "cancel", "help", "what", "why", "anywhere", "near me", "nearby"}
 
 
 class StandInModel:
@@ -78,6 +83,7 @@ class StandInModel:
         if re.search(r"same .* as last time|same .* again", lower):
             return [tool_block("list_bookings")]
         fields = _extract_request(text, view.today)
+        fields.update(_answer_to_question(text, view.state.get("still_missing") or [], fields))
         if view.memories.get("preferred_area") and not fields.get("area") \
                 and not view.state.get("request", {}).get("area"):
             fields["area"] = view.memories["preferred_area"]
@@ -86,7 +92,13 @@ class StandInModel:
             fields["earliest_time"] = view.memories["earliest_time"]
         if fields:
             return [tool_block("update_request", **fields)]
-        return [text_block("Tell me which home service you need and I'll set it up.")]
+        if re.match(r"(hi|hello|hey|good (morning|afternoon|evening))\b", lower):
+            return [text_block(f"Hi! I can arrange {_SUPPORTED}. For example: \"{_EXAMPLE}\"")]
+        if re.search(r"\b(find|need|book|get|arrange|hire|want|looking for)\b", lower):
+            return [text_block(f"Sorry, I can only arrange {_SUPPORTED}, so I can't help with that one. "
+                               "Which of those do you need?")]
+        return [text_block(f"I didn't catch that. I can arrange {_SUPPORTED}: tell me which one, plus the area, "
+                           f"dates and budget. For example: \"{_EXAMPLE}\"")]
 
     def _after_update_request(self, view, result) -> list[dict]:
         if result.get("error"):
@@ -142,7 +154,18 @@ class StandInModel:
         if result.get("error") or not result.get("hold_id"):
             return [text_block(f"That slot could not be held ({result.get('error')}). "
                                "Would you like me to try another option?")]
-        return [tool_block("request_approval", action="book", hold_id=result["hold_id"])]
+        approval = tool_block("request_approval", action="book", hold_id=result["hold_id"])
+        search = view.latest_result("search_providers") or {}
+        ranked = self._rank(view, search.get("providers", []))
+        pick = next((p for p in ranked if p["id"] == result.get("provider_id")), None)
+        if pick is None:
+            return [approval]
+        # Like a real model, say why this one, so the user isn't approving blind.
+        text = f"{pick['name']} looks best: rated {pick['rating']}, listed at {pick['price']:,}."
+        others = [f"{p['name']} ({p['rating']}, {p['price']:,})" for p in ranked if p is not pick][:2]
+        if others:
+            text += " I also compared " + " and ".join(others) + "."
+        return [text_block(text), approval]
 
     def _after_request_approval(self, view, result) -> list[dict]:
         error = result.get("error", "unknown")
@@ -313,6 +336,22 @@ def _extract_request(text: str, today: datetime) -> dict:
     return fields
 
 
+def _answer_to_question(text: str, missing: list[str], fields: dict) -> dict:
+    """A bare reply to the agent's question, such as "Bandra" or "2000", answers what was missing,
+    even when it isn't one of the places or phrases the rules know."""
+    reply = text.strip().strip(".!").lower()
+    reply = re.sub(r"^(?:it'?s |i'?m in |i live in |in |the area is |area is |area: ?)", "", reply)
+    answer = {}
+    if "budget" in missing and "budget" not in fields:
+        match = re.fullmatch(r"(?:rs\.?|inr|₹)?\s*([\d,]{3,})", reply)
+        if match:
+            answer["budget"] = int(match.group(1).replace(",", ""))
+    if "area" in missing and not fields and not answer and reply not in _NOT_A_PLACE \
+            and re.fullmatch(r"[a-z][a-z .'-]{1,40}", reply) and len(reply.split()) <= 4:
+        answer["area"] = reply
+    return answer
+
+
 def _clock(hour: str, minute: str | None, meridiem: str | None) -> str:
     value = int(hour)
     if meridiem and meridiem.startswith("p") and value < 12:
@@ -356,6 +395,9 @@ def _parse_memory_statement(text: str) -> tuple[str, str] | None:
     for area in _AREAS:
         if re.search(rf"\b{area}\b", lower):
             return "preferred_area", area
+    match = re.search(r"\barea (?:is|to) ([a-z][a-z '-]{1,30}?)\s*[.!]?$", lower)
+    if match:
+        return "preferred_area", match.group(1)
     return None
 
 
